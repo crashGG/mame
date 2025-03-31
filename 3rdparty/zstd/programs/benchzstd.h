@@ -100,6 +100,7 @@ typedef struct {
     BMK_mode_t mode;        /* 0: all, 1: compress only 2: decode only */
     unsigned nbSeconds;     /* default timing is in nbSeconds */
     size_t blockSize;       /* Maximum size of each block*/
+    size_t targetCBlockSize;/* Approximative size of compressed blocks */
     int nbWorkers;          /* multithreading */
     unsigned realTime;      /* real time priority */
     int additionalParam;    /* used by python speed benchmark */
@@ -121,19 +122,22 @@ BMK_advancedParams_t BMK_initAdvancedParams(void);
 int BMK_benchFilesAdvanced(
                const char* const * fileNamesTable, unsigned nbFiles,
                const char* dictFileName,
-               int cLevel, const ZSTD_compressionParameters* compressionParams,
+               int startCLevel, int endCLevel,
+               const ZSTD_compressionParameters* compressionParams,
                int displayLevel, const BMK_advancedParams_t* adv);
 
 /*! BMK_syntheticTest() -- called from zstdcli */
-/*  Generates a sample with datagen, using compressibility argument */
-/*  cLevel - compression level to benchmark, errors if invalid
- *  compressibility - determines compressibility of sample
- *  compressionParams - basic compression Parameters
- *  displayLevel - see benchFiles
- *  adv - see advanced_Params_t
+/*  Generates a sample with datagen, using @compressibility argument
+ * @cLevel - compression level to benchmark, errors if invalid
+ * @compressibility - determines compressibility of sample, range [0.0 - 1.0]
+ *        if @compressibility < 0.0, uses the lorem ipsum generator
+ * @compressionParams - basic compression Parameters
+ * @displayLevel - see benchFiles
+ * @adv - see advanced_Params_t
  * @return: 0 on success, !0 on error
  */
-int BMK_syntheticTest(int cLevel, double compressibility,
+int BMK_syntheticTest(double compressibility,
+                      int startingCLevel, int endCLevel,
                       const ZSTD_compressionParameters* compressionParams,
                       int displayLevel, const BMK_advancedParams_t* adv);
 

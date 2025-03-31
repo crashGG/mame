@@ -57,7 +57,7 @@ extern "C" {
 #else
 #  if defined (__cplusplus) && (__cplusplus >= 201402) /* C++14 or greater */
 #    define ZSTD_DEPRECATED(message) [[deprecated(message)]]
-#  elif (defined(GNUC) && (GNUC > 4 || (GNUC == 4 && GNUC_MINOR >= 5))) || defined(__clang__)
+#  elif (defined(GNUC) && (GNUC > 4 || (GNUC == 4 && GNUC_MINOR >= 5))) || defined(__clang__) || defined(__IAR_SYSTEMS_ICC__)
 #    define ZSTD_DEPRECATED(message) __attribute__((deprecated(message)))
 #  elif defined(__GNUC__) && (__GNUC__ >= 3)
 #    define ZSTD_DEPRECATED(message) __attribute__((deprecated))
@@ -106,7 +106,7 @@ extern "C" {
 /*------   Version   ------*/
 #define ZSTD_VERSION_MAJOR    1
 #define ZSTD_VERSION_MINOR    5
-#define ZSTD_VERSION_RELEASE  5
+#define ZSTD_VERSION_RELEASE  6
 #define ZSTD_VERSION_NUMBER  (ZSTD_VERSION_MAJOR *100*100 + ZSTD_VERSION_MINOR *100 + ZSTD_VERSION_RELEASE)
 
 /*! ZSTD_versionNumber() :
@@ -157,37 +157,40 @@ ZSTDLIB_API size_t ZSTD_compress( void* dst, size_t dstCapacity,
                                   int compressionLevel);
 
 /*! ZSTD_decompress() :
- *  `compressedSize` : must be the _exact_ size of some number of compressed and/or skippable frames.
- *  `dstCapacity` is an upper bound of originalSize to regenerate.
- *  If user cannot imply a maximum upper bound, it's better to use streaming mode to decompress data.
- *  @return : the number of bytes decompressed into `dst` (<= `dstCapacity`),
- *            or an errorCode if it fails (which can be tested using ZSTD_isError()). */
+ * `compressedSize` : must be the _exact_ size of some number of compressed and/or skippable frames.
+ *  Multiple compressed frames can be decompressed at once with this method.
+ *  The result will be the concatenation of all decompressed frames, back to back.
+ * `dstCapacity` is an upper bound of originalSize to regenerate.
+ *  First frame's decompressed size can be extracted using ZSTD_getFrameContentSize().
+ *  If maximum upper bound isn't known, prefer using streaming mode to decompress data.
+ * @return : the number of bytes decompressed into `dst` (<= `dstCapacity`),
+ *           or an errorCode if it fails (which can be tested using ZSTD_isError()). */
 ZSTDLIB_API size_t ZSTD_decompress( void* dst, size_t dstCapacity,
                               const void* src, size_t compressedSize);
 
 /*! ZSTD_getFrameContentSize() : requires v1.3.0+
- *  `src` should point to the start of a ZSTD encoded frame.
- *  `srcSize` must be at least as large as the frame header.
- *            hint : any size >= `ZSTD_frameHeaderSize_max` is large enough.
- *  @return : - decompressed size of `src` frame content, if known
- *            - ZSTD_CONTENTSIZE_UNKNOWN if the size cannot be determined
- *            - ZSTD_CONTENTSIZE_ERROR if an error occurred (e.g. invalid magic number, srcSize too small)
- *   note 1 : a 0 return value means the frame is valid but "empty".
- *   note 2 : decompressed size is an optional field, it may not be present, typically in streaming mode.
- *            When `return==ZSTD_CONTENTSIZE_UNKNOWN`, data to decompress could be any size.
- *            In which case, it's necessary to use streaming mode to decompress data.
- *            Optionally, application can rely on some implicit limit,
- *            as ZSTD_decompress() only needs an upper bound of decompressed size.
- *            (For example, data could be necessarily cut into blocks <= 16 KB).
- *   note 3 : decompressed size is always present when compression is completed using single-pass functions,
- *            such as ZSTD_compress(), ZSTD_compressCCtx() ZSTD_compress_usingDict() or ZSTD_compress_usingCDict().
- *   note 4 : decompressed size can be very large (64-bits value),
- *            potentially larger than what local system can handle as a single memory segment.
- *            In which case, it's necessary to use streaming mode to decompress data.
- *   note 5 : If source is untrusted, decompressed size could be wrong or intentionally modified.
- *            Always ensure return value fits within application's authorized limits.
- *            Each application can set its own limits.
- *   note 6 : This function replaces ZSTD_getDecompressedSize() */
+ * `src` should point to the start of a ZSTD encoded frame.
+ * `srcSize` must be at least as large as the frame header.
+ *           hint : any size >= `ZSTD_frameHeaderSize_max` is large enough.
+ * @return : - decompressed size of `src` frame content, if known
+ *           - ZSTD_CONTENTSIZE_UNKNOWN if the size cannot be determined
+ *           - ZSTD_CONTENTSIZE_ERROR if an error occurred (e.g. invalid magic number, srcSize too small)
+ *  note 1 : a 0 return value means the frame is valid but "empty".
+ *  note 2 : decompressed size is an optional field, it may not be present (typically in streaming mode).
+ *           When `return==ZSTD_CONTENTSIZE_UNKNOWN`, data to decompress could be any size.
+ *           In which case, it's necessary to use streaming mode to decompress data.
+ *           Optionally, application can rely on some implicit limit,
+ *           as ZSTD_decompress() only needs an upper bound of decompressed size.
+ *           (For example, data could be necessarily cut into blocks <= 16 KB).
+ *  note 3 : decompressed size is always present when compression is completed using single-pass functions,
+ *           such as ZSTD_compress(), ZSTD_compressCCtx() ZSTD_compress_usingDict() or ZSTD_compress_usingCDict().
+ *  note 4 : decompressed size can be very large (64-bits value),
+ *           potentially larger than what local system can handle as a single memory segment.
+ *           In which case, it's necessary to use streaming mode to decompress data.
+ *  note 5 : If source is untrusted, decompressed size could be wrong or intentionally modified.
+ *           Always ensure return value fits within application's authorized limits.
+ *           Each application can set its own limits.
+ *  note 6 : This function replaces ZSTD_getDecompressedSize() */
 #define ZSTD_CONTENTSIZE_UNKNOWN (0ULL - 1)
 #define ZSTD_CONTENTSIZE_ERROR   (0ULL - 2)
 ZSTDLIB_API unsigned long long ZSTD_getFrameContentSize(const void *src, size_t srcSize);
@@ -228,7 +231,7 @@ ZSTDLIB_API size_t ZSTD_findFrameCompressedSize(const void* src, size_t srcSize)
  * for example to size a static array on stack.
  * Will produce constant value 0 if srcSize too large.
  */
-#define ZSTD_MAX_INPUT_SIZE ((sizeof(size_t)==8) ? 0xFF00FF00FF00FF00LLU : 0xFF00FF00U)
+#define ZSTD_MAX_INPUT_SIZE ((sizeof(size_t)==8) ? 0xFF00FF00FF00FF00ULL : 0xFF00FF00U)
 #define ZSTD_COMPRESSBOUND(srcSize)   (((size_t)(srcSize) >= ZSTD_MAX_INPUT_SIZE) ? 0 : (srcSize) + ((srcSize)>>8) + (((srcSize) < (128<<10)) ? (((128<<10) - (srcSize)) >> 11) /* margin, from 64 to 0 */ : 0))  /* this formula ensures that bound(A) + bound(B) <= bound(A+B) as long as A and B >= 128 KB */
 ZSTDLIB_API size_t ZSTD_compressBound(size_t srcSize); /*!< maximum compressed size in worst case single-pass scenario */
 /* ZSTD_isError() :
@@ -249,7 +252,7 @@ ZSTDLIB_API int         ZSTD_defaultCLevel(void);           /*!< default compres
 /*= Compression context
  *  When compressing many times,
  *  it is recommended to allocate a context just once,
- *  and re-use it for each successive compression operation.
+ *  and reuse it for each successive compression operation.
  *  This will make workload friendlier for system's memory.
  *  Note : re-using context is just a speed / resource optimization.
  *         It doesn't change the compression ratio, which remains identical.
@@ -262,9 +265,9 @@ ZSTDLIB_API size_t     ZSTD_freeCCtx(ZSTD_CCtx* cctx);  /* accept NULL pointer *
 
 /*! ZSTD_compressCCtx() :
  *  Same as ZSTD_compress(), using an explicit ZSTD_CCtx.
- *  Important : in order to behave similarly to `ZSTD_compress()`,
- *  this function compresses at requested compression level,
- *  __ignoring any other parameter__ .
+ *  Important : in order to mirror `ZSTD_compress()` behavior,
+ *  this function compresses at the requested compression level,
+ *  __ignoring any other advanced parameter__ .
  *  If any advanced parameter was set using the advanced API,
  *  they will all be reset. Only `compressionLevel` remains.
  */
@@ -276,7 +279,7 @@ ZSTDLIB_API size_t ZSTD_compressCCtx(ZSTD_CCtx* cctx,
 /*= Decompression context
  *  When decompressing many times,
  *  it is recommended to allocate a context only once,
- *  and re-use it for each successive compression operation.
+ *  and reuse it for each successive compression operation.
  *  This will make workload friendlier for system's memory.
  *  Use one context per thread for parallel execution. */
 typedef struct ZSTD_DCtx_s ZSTD_DCtx;
@@ -286,7 +289,7 @@ ZSTDLIB_API size_t     ZSTD_freeDCtx(ZSTD_DCtx* dctx);  /* accept NULL pointer *
 /*! ZSTD_decompressDCtx() :
  *  Same as ZSTD_decompress(),
  *  requires an allocated ZSTD_DCtx.
- *  Compatible with sticky parameters.
+ *  Compatible with sticky parameters (see below).
  */
 ZSTDLIB_API size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx,
                                        void* dst, size_t dstCapacity,
@@ -302,12 +305,12 @@ ZSTDLIB_API size_t ZSTD_decompressDCtx(ZSTD_DCtx* dctx,
  *   using ZSTD_CCtx_set*() functions.
  *   Pushed parameters are sticky : they are valid for next compressed frame, and any subsequent frame.
  *   "sticky" parameters are applicable to `ZSTD_compress2()` and `ZSTD_compressStream*()` !
- *   __They do not apply to "simple" one-shot variants such as ZSTD_compressCCtx()__ .
+ *   __They do not apply to one-shot variants such as ZSTD_compressCCtx()__ .
  *
  *   It's possible to reset all parameters to "default" using ZSTD_CCtx_reset().
  *
  *   This API supersedes all other "advanced" API entry points in the experimental section.
- *   In the future, we expect to remove from experimental API entry points which are redundant with this API.
+ *   In the future, we expect to remove API entry points from experimental which are redundant with this API.
  */
 
 
@@ -390,6 +393,19 @@ typedef enum {
                               * The higher the value of selected strategy, the more complex it is,
                               * resulting in stronger and slower compression.
                               * Special: value 0 means "use default strategy". */
+
+    ZSTD_c_targetCBlockSize=130, /* v1.5.6+
+                                  * Attempts to fit compressed block size into approximately targetCBlockSize.
+                                  * Bound by ZSTD_TARGETCBLOCKSIZE_MIN and ZSTD_TARGETCBLOCKSIZE_MAX.
+                                  * Note that it's not a guarantee, just a convergence target (default:0).
+                                  * No target when targetCBlockSize == 0.
+                                  * This is helpful in low bandwidth streaming environments to improve end-to-end latency,
+                                  * when a client can make use of partial documents (a prominent example being Chrome).
+                                  * Note: this parameter is stable since v1.5.6.
+                                  * It was present as an experimental parameter in earlier versions,
+                                  * but it's not recommended using it with earlier library versions
+                                  * due to massive performance regressions.
+                                  */
     /* LDM mode parameters */
     ZSTD_c_enableLongDistanceMatching=160, /* Enable long distance matching.
                                      * This parameter is designed to improve compression ratio
@@ -469,7 +485,6 @@ typedef enum {
      * ZSTD_c_forceMaxWindow
      * ZSTD_c_forceAttachDict
      * ZSTD_c_literalCompressionMode
-     * ZSTD_c_targetCBlockSize
      * ZSTD_c_srcSizeHint
      * ZSTD_c_enableDedicatedDictSearch
      * ZSTD_c_stableInBuffer
@@ -490,7 +505,7 @@ typedef enum {
      ZSTD_c_experimentalParam3=1000,
      ZSTD_c_experimentalParam4=1001,
      ZSTD_c_experimentalParam5=1002,
-     ZSTD_c_experimentalParam6=1003,
+     /* was ZSTD_c_experimentalParam6=1003; is now ZSTD_c_targetCBlockSize */
      ZSTD_c_experimentalParam7=1004,
      ZSTD_c_experimentalParam8=1005,
      ZSTD_c_experimentalParam9=1006,
@@ -575,6 +590,7 @@ ZSTDLIB_API size_t ZSTD_CCtx_reset(ZSTD_CCtx* cctx, ZSTD_ResetDirective reset);
 
 /*! ZSTD_compress2() :
  *  Behave the same as ZSTD_compressCCtx(), but compression parameters are set using the advanced API.
+ *  (note that this entry point doesn't even expose a compression level parameter).
  *  ZSTD_compress2() always starts a new frame.
  *  Should cctx hold data from a previously unfinished frame, everything about it is forgotten.
  *  - Compression parameters are pushed into CCtx before starting compression, using ZSTD_CCtx_set*()
@@ -618,6 +634,7 @@ typedef enum {
      * ZSTD_d_forceIgnoreChecksum
      * ZSTD_d_refMultipleDDicts
      * ZSTD_d_disableHuffmanAssembly
+     * ZSTD_d_maxBlockSize
      * Because they are not stable, it's necessary to define ZSTD_STATIC_LINKING_ONLY to access them.
      * note : never ever use experimentalParam? names directly
      */
@@ -625,7 +642,8 @@ typedef enum {
      ZSTD_d_experimentalParam2=1001,
      ZSTD_d_experimentalParam3=1002,
      ZSTD_d_experimentalParam4=1003,
-     ZSTD_d_experimentalParam5=1004
+     ZSTD_d_experimentalParam5=1004,
+     ZSTD_d_experimentalParam6=1005
 
 } ZSTD_dParameter;
 
@@ -680,14 +698,14 @@ typedef struct ZSTD_outBuffer_s {
 *  A ZSTD_CStream object is required to track streaming operation.
 *  Use ZSTD_createCStream() and ZSTD_freeCStream() to create/release resources.
 *  ZSTD_CStream objects can be reused multiple times on consecutive compression operations.
-*  It is recommended to re-use ZSTD_CStream since it will play nicer with system's memory, by re-using already allocated memory.
+*  It is recommended to reuse ZSTD_CStream since it will play nicer with system's memory, by re-using already allocated memory.
 *
 *  For parallel execution, use one separate ZSTD_CStream per thread.
 *
 *  note : since v1.3.0, ZSTD_CStream and ZSTD_CCtx are the same thing.
 *
 *  Parameters are sticky : when starting a new compression on the same context,
-*  it will re-use the same sticky parameters as previous compression session.
+*  it will reuse the same sticky parameters as previous compression session.
 *  When in doubt, it's recommended to fully initialize the context before usage.
 *  Use ZSTD_CCtx_reset() to reset the context and ZSTD_CCtx_setParameter(),
 *  ZSTD_CCtx_setPledgedSrcSize(), or ZSTD_CCtx_loadDictionary() and friends to
@@ -776,6 +794,11 @@ typedef enum {
  *            only ZSTD_e_end or ZSTD_e_flush operations are allowed.
  *            Before starting a new compression job, or changing compression parameters,
  *            it is required to fully flush internal buffers.
+ *  - note: if an operation ends with an error, it may leave @cctx in an undefined state.
+ *          Therefore, it's UB to invoke ZSTD_compressStream2() of ZSTD_compressStream() on such a state.
+ *          In order to be re-employed after an error, a state must be reset,
+ *          which can be done explicitly (ZSTD_CCtx_reset()),
+ *          or is sometimes implied by methods starting a new compression job (ZSTD_initCStream(), ZSTD_compressCCtx())
  */
 ZSTDLIB_API size_t ZSTD_compressStream2( ZSTD_CCtx* cctx,
                                          ZSTD_outBuffer* output,
@@ -835,7 +858,7 @@ ZSTDLIB_API size_t ZSTD_endStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output);
 *
 *  A ZSTD_DStream object is required to track streaming operations.
 *  Use ZSTD_createDStream() and ZSTD_freeDStream() to create/release resources.
-*  ZSTD_DStream objects can be re-used multiple times.
+*  ZSTD_DStream objects can be re-employed multiple times.
 *
 *  Use ZSTD_initDStream() to start a new decompression operation.
 * @return : recommended first input size
@@ -845,16 +868,21 @@ ZSTDLIB_API size_t ZSTD_endStream(ZSTD_CStream* zcs, ZSTD_outBuffer* output);
 *  The function will update both `pos` fields.
 *  If `input.pos < input.size`, some input has not been consumed.
 *  It's up to the caller to present again remaining data.
+*
 *  The function tries to flush all data decoded immediately, respecting output buffer size.
 *  If `output.pos < output.size`, decoder has flushed everything it could.
-*  But if `output.pos == output.size`, there might be some data left within internal buffers.,
+*
+*  However, when `output.pos == output.size`, it's more difficult to know.
+*  If @return > 0, the frame is not complete, meaning
+*  either there is still some data left to flush within internal buffers,
+*  or there is more input to read to complete the frame (or both).
 *  In which case, call ZSTD_decompressStream() again to flush whatever remains in the buffer.
 *  Note : with no additional input provided, amount of data flushed is necessarily <= ZSTD_BLOCKSIZE_MAX.
 * @return : 0 when a frame is completely decoded and fully flushed,
 *        or an error code, which can be tested using ZSTD_isError(),
 *        or any other value > 0, which means there is still some decoding or flushing to do to complete current frame :
 *                                the return value is a suggested next input size (just a hint for better latency)
-*                                that will never request more than the remaining frame size.
+*                                that will never request more than the remaining content of the compressed frame.
 * *******************************************************************************/
 
 typedef ZSTD_DCtx ZSTD_DStream;  /**< DCtx and DStream are now effectively same object (>= v1.3.0) */
@@ -881,14 +909,21 @@ ZSTDLIB_API size_t ZSTD_initDStream(ZSTD_DStream* zds);
  * Function will update both input and output `pos` fields exposing current state via these fields:
  * - `input.pos < input.size`, some input remaining and caller should provide remaining input
  *   on the next call.
- * - `output.pos < output.size`, decoder finished and flushed all remaining buffers.
- * - `output.pos == output.size`, potentially uncflushed data present in the internal buffers,
- *   call ZSTD_decompressStream() again to flush remaining data to output.
+ * - `output.pos < output.size`, decoder flushed internal output buffer.
+ * - `output.pos == output.size`, unflushed data potentially present in the internal buffers,
+ *   check ZSTD_decompressStream() @return value,
+ *   if > 0, invoke it again to flush remaining data to output.
  * Note : with no additional input, amount of data flushed <= ZSTD_BLOCKSIZE_MAX.
  *
  * @return : 0 when a frame is completely decoded and fully flushed,
  *           or an error code, which can be tested using ZSTD_isError(),
  *           or any other value > 0, which means there is some decoding or flushing to do to complete current frame.
+ *
+ * Note: when an operation returns with an error code, the @zds state may be left in undefined state.
+ *       It's UB to invoke `ZSTD_decompressStream()` on such a state.
+ *       In order to re-use such a state, it must be first reset,
+ *       which can be done explicitly (`ZSTD_DCtx_reset()`),
+ *       or is implied for operations starting some new decompression job (`ZSTD_initDStream`, `ZSTD_decompressDCtx()`, `ZSTD_decompress_usingDict()`)
  */
 ZSTDLIB_API size_t ZSTD_decompressStream(ZSTD_DStream* zds, ZSTD_outBuffer* output, ZSTD_inBuffer* input);
 
@@ -1021,7 +1056,7 @@ ZSTDLIB_API unsigned ZSTD_getDictID_fromFrame(const void* src, size_t srcSize);
  *
  * This API allows dictionaries to be used with ZSTD_compress2(),
  * ZSTD_compressStream2(), and ZSTD_decompressDCtx().
- * Dictionaries are sticky, they remain valid when same context is re-used,
+ * Dictionaries are sticky, they remain valid when same context is reused,
  * they only reset when the context is reset
  * with ZSTD_reset_parameters or ZSTD_reset_session_and_parameters.
  * In contrast, Prefixes are single-use.
@@ -1239,7 +1274,7 @@ ZSTDLIB_API size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 #define ZSTD_LDM_HASHRATELOG_MAX (ZSTD_WINDOWLOG_MAX - ZSTD_HASHLOG_MIN)
 
 /* Advanced parameter bounds */
-#define ZSTD_TARGETCBLOCKSIZE_MIN   64
+#define ZSTD_TARGETCBLOCKSIZE_MIN   1340 /* suitable to fit into an ethernet / wifi / 4G transport frame */
 #define ZSTD_TARGETCBLOCKSIZE_MAX   ZSTD_BLOCKSIZE_MAX
 #define ZSTD_SRCSIZEHINT_MIN        0
 #define ZSTD_SRCSIZEHINT_MAX        INT_MAX
@@ -1527,25 +1562,38 @@ typedef enum {
 ZSTDLIB_STATIC_API size_t ZSTD_sequenceBound(size_t srcSize);
 
 /*! ZSTD_generateSequences() :
+ * WARNING: This function is meant for debugging and informational purposes ONLY!
+ * Its implementation is flawed, and it will be deleted in a future version.
+ * It is not guaranteed to succeed, as there are several cases where it will give
+ * up and fail. You should NOT use this function in production code.
+ *
+ * This function is deprecated, and will be removed in a future version.
+ *
  * Generate sequences using ZSTD_compress2(), given a source buffer.
+ *
+ * @param zc The compression context to be used for ZSTD_compress2(). Set any
+ *           compression parameters you need on this context.
+ * @param outSeqs The output sequences buffer of size @p outSeqsSize
+ * @param outSeqsSize The size of the output sequences buffer.
+ *                    ZSTD_sequenceBound(srcSize) is an upper bound on the number
+ *                    of sequences that can be generated.
+ * @param src The source buffer to generate sequences from of size @p srcSize.
+ * @param srcSize The size of the source buffer.
  *
  * Each block will end with a dummy sequence
  * with offset == 0, matchLength == 0, and litLength == length of last literals.
  * litLength may be == 0, and if so, then the sequence of (of: 0 ml: 0 ll: 0)
  * simply acts as a block delimiter.
  *
- * @zc can be used to insert custom compression params.
- * This function invokes ZSTD_compress2().
- *
- * The output of this function can be fed into ZSTD_compressSequences() with CCtx
- * setting of ZSTD_c_blockDelimiters as ZSTD_sf_explicitBlockDelimiters
- * @return : number of sequences generated
+ * @returns The number of sequences generated, necessarily less than
+ *          ZSTD_sequenceBound(srcSize), or an error code that can be checked
+ *          with ZSTD_isError().
  */
-
+ZSTD_DEPRECATED("For debugging only, will be replaced by ZSTD_extractSequences()")
 ZSTDLIB_STATIC_API size_t
-ZSTD_generateSequences( ZSTD_CCtx* zc,
-                        ZSTD_Sequence* outSeqs, size_t outSeqsSize,
-                        const void* src, size_t srcSize);
+ZSTD_generateSequences(ZSTD_CCtx* zc,
+                       ZSTD_Sequence* outSeqs, size_t outSeqsSize,
+                       const void* src, size_t srcSize);
 
 /*! ZSTD_mergeBlockDelimiters() :
  * Given an array of ZSTD_Sequence, remove all sequences that represent block delimiters/last literals
@@ -1640,56 +1688,59 @@ ZSTDLIB_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
 /*! ZSTD_estimate*() :
  *  These functions make it possible to estimate memory usage
  *  of a future {D,C}Ctx, before its creation.
+ *  This is useful in combination with ZSTD_initStatic(),
+ *  which makes it possible to employ a static buffer for ZSTD_CCtx* state.
  *
  *  ZSTD_estimateCCtxSize() will provide a memory budget large enough
- *  for any compression level up to selected one.
- *  Note : Unlike ZSTD_estimateCStreamSize*(), this estimate
- *         does not include space for a window buffer.
- *         Therefore, the estimation is only guaranteed for single-shot compressions, not streaming.
+ *  to compress data of any size using one-shot compression ZSTD_compressCCtx() or ZSTD_compress2()
+ *  associated with any compression level up to max specified one.
  *  The estimate will assume the input may be arbitrarily large,
  *  which is the worst case.
  *
+ *  Note that the size estimation is specific for one-shot compression,
+ *  it is not valid for streaming (see ZSTD_estimateCStreamSize*())
+ *  nor other potential ways of using a ZSTD_CCtx* state.
+ *
  *  When srcSize can be bound by a known and rather "small" value,
- *  this fact can be used to provide a tighter estimation
- *  because the CCtx compression context will need less memory.
- *  This tighter estimation can be provided by more advanced functions
+ *  this knowledge can be used to provide a tighter budget estimation
+ *  because the ZSTD_CCtx* state will need less memory for small inputs.
+ *  This tighter estimation can be provided by employing more advanced functions
  *  ZSTD_estimateCCtxSize_usingCParams(), which can be used in tandem with ZSTD_getCParams(),
  *  and ZSTD_estimateCCtxSize_usingCCtxParams(), which can be used in tandem with ZSTD_CCtxParams_setParameter().
  *  Both can be used to estimate memory using custom compression parameters and arbitrary srcSize limits.
  *
  *  Note : only single-threaded compression is supported.
  *  ZSTD_estimateCCtxSize_usingCCtxParams() will return an error code if ZSTD_c_nbWorkers is >= 1.
- *
- *  Note 2 : ZSTD_estimateCCtxSize* functions are not compatible with the Block-Level Sequence Producer API at this time.
- *  Size estimates assume that no external sequence producer is registered.
  */
-ZSTDLIB_STATIC_API size_t ZSTD_estimateCCtxSize(int compressionLevel);
+ZSTDLIB_STATIC_API size_t ZSTD_estimateCCtxSize(int maxCompressionLevel);
 ZSTDLIB_STATIC_API size_t ZSTD_estimateCCtxSize_usingCParams(ZSTD_compressionParameters cParams);
 ZSTDLIB_STATIC_API size_t ZSTD_estimateCCtxSize_usingCCtxParams(const ZSTD_CCtx_params* params);
 ZSTDLIB_STATIC_API size_t ZSTD_estimateDCtxSize(void);
 
 /*! ZSTD_estimateCStreamSize() :
- *  ZSTD_estimateCStreamSize() will provide a budget large enough for any compression level up to selected one.
- *  It will also consider src size to be arbitrarily "large", which is worst case.
+ *  ZSTD_estimateCStreamSize() will provide a memory budget large enough for streaming compression
+ *  using any compression level up to the max specified one.
+ *  It will also consider src size to be arbitrarily "large", which is a worst case scenario.
  *  If srcSize is known to always be small, ZSTD_estimateCStreamSize_usingCParams() can provide a tighter estimation.
  *  ZSTD_estimateCStreamSize_usingCParams() can be used in tandem with ZSTD_getCParams() to create cParams from compressionLevel.
  *  ZSTD_estimateCStreamSize_usingCCtxParams() can be used in tandem with ZSTD_CCtxParams_setParameter(). Only single-threaded compression is supported. This function will return an error code if ZSTD_c_nbWorkers is >= 1.
  *  Note : CStream size estimation is only correct for single-threaded compression.
- *  ZSTD_DStream memory budget depends on window Size.
+ *  ZSTD_estimateCStreamSize_usingCCtxParams() will return an error code if ZSTD_c_nbWorkers is >= 1.
+ *  Note 2 : ZSTD_estimateCStreamSize* functions are not compatible with the Block-Level Sequence Producer API at this time.
+ *  Size estimates assume that no external sequence producer is registered.
+ *
+ *  ZSTD_DStream memory budget depends on frame's window Size.
  *  This information can be passed manually, using ZSTD_estimateDStreamSize,
  *  or deducted from a valid frame Header, using ZSTD_estimateDStreamSize_fromFrame();
+ *  Any frame requesting a window size larger than max specified one will be rejected.
  *  Note : if streaming is init with function ZSTD_init?Stream_usingDict(),
  *         an internal ?Dict will be created, which additional size is not estimated here.
  *         In this case, get total size by adding ZSTD_estimate?DictSize
- *  Note 2 : only single-threaded compression is supported.
- *  ZSTD_estimateCStreamSize_usingCCtxParams() will return an error code if ZSTD_c_nbWorkers is >= 1.
- *  Note 3 : ZSTD_estimateCStreamSize* functions are not compatible with the Block-Level Sequence Producer API at this time.
- *  Size estimates assume that no external sequence producer is registered.
  */
-ZSTDLIB_STATIC_API size_t ZSTD_estimateCStreamSize(int compressionLevel);
+ZSTDLIB_STATIC_API size_t ZSTD_estimateCStreamSize(int maxCompressionLevel);
 ZSTDLIB_STATIC_API size_t ZSTD_estimateCStreamSize_usingCParams(ZSTD_compressionParameters cParams);
 ZSTDLIB_STATIC_API size_t ZSTD_estimateCStreamSize_usingCCtxParams(const ZSTD_CCtx_params* params);
-ZSTDLIB_STATIC_API size_t ZSTD_estimateDStreamSize(size_t windowSize);
+ZSTDLIB_STATIC_API size_t ZSTD_estimateDStreamSize(size_t maxWindowSize);
 ZSTDLIB_STATIC_API size_t ZSTD_estimateDStreamSize_fromFrame(const void* src, size_t srcSize);
 
 /*! ZSTD_estimate?DictSize() :
@@ -1754,7 +1805,15 @@ static
 #ifdef __GNUC__
 __attribute__((__unused__))
 #endif
+
+#if defined(__clang__) && __clang_major__ >= 5
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
+#endif
 ZSTD_customMem const ZSTD_defaultCMem = { NULL, NULL, NULL };  /**< this constant defers to stdlib's functions */
+#if defined(__clang__) && __clang_major__ >= 5
+#pragma clang diagnostic pop
+#endif
 
 ZSTDLIB_STATIC_API ZSTD_CCtx*    ZSTD_createCCtx_advanced(ZSTD_customMem customMem);
 ZSTDLIB_STATIC_API ZSTD_CStream* ZSTD_createCStream_advanced(ZSTD_customMem customMem);
@@ -1945,11 +2004,6 @@ ZSTDLIB_STATIC_API size_t ZSTD_CCtx_refPrefix_advanced(ZSTD_CCtx* cctx, const vo
  * negative compression levels do not use literal compression.
  */
 #define ZSTD_c_literalCompressionMode ZSTD_c_experimentalParam5
-
-/* Tries to fit compressed block size to be around targetCBlockSize.
- * No target when targetCBlockSize == 0.
- * There is no guarantee on compressed block size (default:0) */
-#define ZSTD_c_targetCBlockSize ZSTD_c_experimentalParam6
 
 /* User's best guess of source size.
  * Hint is not valid when srcSizeHint == 0.
@@ -2430,6 +2484,22 @@ ZSTDLIB_STATIC_API size_t ZSTD_DCtx_getParameter(ZSTD_DCtx* dctx, ZSTD_dParamete
  */
 #define ZSTD_d_disableHuffmanAssembly ZSTD_d_experimentalParam5
 
+/* ZSTD_d_maxBlockSize
+ * Allowed values are between 1KB and ZSTD_BLOCKSIZE_MAX (128KB).
+ * The default is ZSTD_BLOCKSIZE_MAX, and setting to 0 will set to the default.
+ *
+ * Forces the decompressor to reject blocks whose content size is
+ * larger than the configured maxBlockSize. When maxBlockSize is
+ * larger than the windowSize, the windowSize is used instead.
+ * This saves memory on the decoder when you know all blocks are small.
+ *
+ * This option is typically used in conjunction with ZSTD_c_maxBlockSize.
+ *
+ * WARNING: This causes the decoder to reject otherwise valid frames
+ * that have block sizes larger than the configured maxBlockSize.
+ */
+#define ZSTD_d_maxBlockSize ZSTD_d_experimentalParam6
+
 
 /*! ZSTD_DCtx_setFormat() :
  *  This function is REDUNDANT. Prefer ZSTD_DCtx_setParameter().
@@ -2557,7 +2627,7 @@ size_t ZSTD_initCStream_usingCDict_advanced(ZSTD_CStream* zcs,
  *       explicitly specified.
  *
  *  start a new frame, using same parameters from previous frame.
- *  This is typically useful to skip dictionary loading stage, since it will re-use it in-place.
+ *  This is typically useful to skip dictionary loading stage, since it will reuse it in-place.
  *  Note that zcs must be init at least once before using ZSTD_resetCStream().
  *  If pledgedSrcSize is not known at reset time, use macro ZSTD_CONTENTSIZE_UNKNOWN.
  *  If pledgedSrcSize > 0, its value must be correct, as it will be written in header, and controlled at the end.
@@ -2633,7 +2703,7 @@ ZSTDLIB_STATIC_API size_t ZSTD_initDStream_usingDDict(ZSTD_DStream* zds, const Z
  *
  *     ZSTD_DCtx_reset(zds, ZSTD_reset_session_only);
  *
- * re-use decompression parameters from previous init; saves dictionary loading
+ * reuse decompression parameters from previous init; saves dictionary loading
  */
 ZSTD_DEPRECATED("use ZSTD_DCtx_reset, see zstd.h for detailed instructions")
 ZSTDLIB_STATIC_API size_t ZSTD_resetDStream(ZSTD_DStream* zds);
@@ -2765,7 +2835,7 @@ ZSTDLIB_STATIC_API size_t ZSTD_resetDStream(ZSTD_DStream* zds);
 
 #define ZSTD_SEQUENCE_PRODUCER_ERROR ((size_t)(-1))
 
-typedef size_t ZSTD_sequenceProducer_F (
+typedef size_t (*ZSTD_sequenceProducer_F) (
   void* sequenceProducerState,
   ZSTD_Sequence* outSeqs, size_t outSeqsCapacity,
   const void* src, size_t srcSize,
@@ -2797,7 +2867,23 @@ ZSTDLIB_STATIC_API void
 ZSTD_registerSequenceProducer(
   ZSTD_CCtx* cctx,
   void* sequenceProducerState,
-  ZSTD_sequenceProducer_F* sequenceProducer
+  ZSTD_sequenceProducer_F sequenceProducer
+);
+
+/*! ZSTD_CCtxParams_registerSequenceProducer() :
+ * Same as ZSTD_registerSequenceProducer(), but operates on ZSTD_CCtx_params.
+ * This is used for accurate size estimation with ZSTD_estimateCCtxSize_usingCCtxParams(),
+ * which is needed when creating a ZSTD_CCtx with ZSTD_initStaticCCtx().
+ *
+ * If you are using the external sequence producer API in a scenario where ZSTD_initStaticCCtx()
+ * is required, then this function is for you. Otherwise, you probably don't need it.
+ *
+ * See tests/zstreamtest.c for example usage. */
+ZSTDLIB_STATIC_API void
+ZSTD_CCtxParams_registerSequenceProducer(
+  ZSTD_CCtx_params* params,
+  void* sequenceProducerState,
+  ZSTD_sequenceProducer_F sequenceProducer
 );
 
 
@@ -2820,7 +2906,7 @@ ZSTD_registerSequenceProducer(
 
   A ZSTD_CCtx object is required to track streaming operations.
   Use ZSTD_createCCtx() / ZSTD_freeCCtx() to manage resource.
-  ZSTD_CCtx object can be re-used multiple times within successive compression operations.
+  ZSTD_CCtx object can be reused multiple times within successive compression operations.
 
   Start by initializing a context.
   Use ZSTD_compressBegin(), or ZSTD_compressBegin_usingDict() for dictionary compression.
@@ -2841,7 +2927,7 @@ ZSTD_registerSequenceProducer(
   It's possible to use srcSize==0, in which case, it will write a final empty block to end the frame.
   Without last block mark, frames are considered unfinished (hence corrupted) by compliant decoders.
 
-  `ZSTD_CCtx` object can be re-used (ZSTD_compressBegin()) to compress again.
+  `ZSTD_CCtx` object can be reused (ZSTD_compressBegin()) to compress again.
 */
 
 /*=====   Buffer-less streaming compression functions  =====*/
@@ -2873,7 +2959,7 @@ size_t ZSTD_compressBegin_usingCDict_advanced(ZSTD_CCtx* const cctx, const ZSTD_
 
   A ZSTD_DCtx object is required to track streaming operations.
   Use ZSTD_createDCtx() / ZSTD_freeDCtx() to manage it.
-  A ZSTD_DCtx object can be re-used multiple times.
+  A ZSTD_DCtx object can be reused multiple times.
 
   First typical operation is to retrieve frame parameters, using ZSTD_getFrameHeader().
   Frame header is extracted from the beginning of compressed frame, so providing only the frame's beginning is enough.

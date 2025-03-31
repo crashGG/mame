@@ -116,7 +116,7 @@ static size_t decodeSequences(void* dst, size_t nbSequences,
                 }
             }
             for (; j < matchLength; ++j) {
-                op[j] = op[j - generatedSequences[i].offset];
+                op[j] = op[(ptrdiff_t)(j - generatedSequences[i].offset)];
             }
             op += j;
             FUZZ_ASSERT(generatedSequences[i].matchLength == j + k);
@@ -127,7 +127,7 @@ static size_t decodeSequences(void* dst, size_t nbSequences,
     FUZZ_ASSERT(litPtr <= litEnd);
     if (mode == ZSTD_sf_noBlockDelimiters) {
         const uint32_t lastLLSize = (uint32_t)(litEnd - litPtr);
-        if (lastLLSize <= oend - op) {
+        if (lastLLSize <= (uint32_t)(oend - op)) {
             memcpy(op, litPtr, lastLLSize);
             generatedSrcBufferSize += lastLLSize;
     }   }
