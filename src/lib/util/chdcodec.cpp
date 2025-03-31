@@ -729,23 +729,24 @@ chd_compressor_group::~chd_compressor_group()
 
 
 //-------------------------------------------------
-//  find_best_compressor - iterate over all codecs
-//  to determine which one produces the best
+//  find_best_compressor - iterate over all codecs	遍历尝试所有编解码器
+//  to determine which one produces the best		以确定哪一个产生最好的压缩块
 //  compression for this hunk
 //-------------------------------------------------
 
 int8_t chd_compressor_group::find_best_compressor(const uint8_t *src, uint8_t *compressed, uint32_t &complen)
 {
-	// determine best compression technique
-	complen = m_hunkbytes;
+	// determine best compression technique		确定最佳压缩技术
+	complen = m_hunkbytes;		// 先将 参照大小 设为原始块大小
 	int8_t compression = -1;
+	float zzz=1.0f;
 	for (int codecnum = 0; codecnum < std::size(m_compressor); codecnum++)
 		if (m_compressor[codecnum])
 		{
-			// attempt to compress, swallowing errors
+			// attempt to compress, swallowing errors	尝试压缩，吞下错误
 			try
 			{
-				// if this is the best one, copy the data into the permanent buffer
+				// if this is the best one, copy the data into the permanent buffer	如果这是最好的，则将数据复制到永久缓冲区中
 				uint32_t compbytes = m_compressor[codecnum]->compress(src, m_hunkbytes, &m_compress_test[0]);
 #if CHDCODEC_VERIFY_COMPRESSION
 				try
@@ -771,10 +772,15 @@ int8_t chd_compressor_group::find_best_compressor(const uint8_t *src, uint8_t *c
 				}
 printf("   codec%d=%d bytes            \n", codecnum, compbytes);
 #endif
-				if (compbytes < complen)
+				//if (compbytes < complen)			// 原始判断，不分级，只要最小
+
+													// 分级判断
+				if (codecnum == 3) zzz=0.944272f;	// 当第4轮时(lzma)，用zzz给下面的判断条件再收紧一级
+													// 0,1,2前三个算法，取最小，且压缩后小于参照值 94.4272% 记录
+				if (compbytes < (m_hunkbytes * 0.944272 * zzz) && compbytes < (complen * zzz))
 				{
-					compression = codecnum;
-					complen = compbytes;
+					compression = codecnum;					// 记录压缩算法
+					complen = compbytes;					// 并将此压缩后大小设为参照
 					memcpy(compressed, &m_compress_test[0], compbytes);
 				}
 			}
@@ -783,7 +789,7 @@ printf("   codec%d=%d bytes            \n", codecnum, compbytes);
 			}
 		}
 
-	// if the best is none, copy it over
+	// if the best is none, copy it over	如果没有最好的，就复制自身
 	if (compression == -1)
 		memcpy(compressed, src, m_hunkbytes);
 	return compression;
