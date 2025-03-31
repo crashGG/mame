@@ -291,7 +291,7 @@ int core_text_file::getc()
 					}
 					else
 					{
-						m_text_type = text_file_type::OSD;
+						m_text_type = text_file_type::UTF8;
 						pos = 0;
 					}
 				}
