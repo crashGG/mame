@@ -662,9 +662,9 @@ static clock_t lastprogress = 0;
 
 // default compressors
 static const std::array<chd_codec_type, 4> s_no_compression = { CHD_CODEC_NONE, CHD_CODEC_NONE, CHD_CODEC_NONE, CHD_CODEC_NONE };
-static const std::array<chd_codec_type, 4> s_default_raw_compression = { CHD_CODEC_LZMA, CHD_CODEC_ZLIB, CHD_CODEC_HUFFMAN, CHD_CODEC_FLAC };
-static const std::array<chd_codec_type, 4> s_default_hd_compression = { CHD_CODEC_LZMA, CHD_CODEC_ZLIB, CHD_CODEC_HUFFMAN, CHD_CODEC_FLAC };
-static const std::array<chd_codec_type, 4> s_default_cd_compression = { CHD_CODEC_CD_LZMA, CHD_CODEC_CD_ZLIB, CHD_CODEC_CD_FLAC };
+static const std::array<chd_codec_type, 4> s_default_raw_compression = { CHD_CODEC_ZSTD, CHD_CODEC_HUFFMAN, CHD_CODEC_FLAC, CHD_CODEC_LZMA };
+static const std::array<chd_codec_type, 4> s_default_hd_compression = { CHD_CODEC_ZSTD, CHD_CODEC_HUFFMAN, CHD_CODEC_FLAC, CHD_CODEC_LZMA };
+static const std::array<chd_codec_type, 4> s_default_cd_compression = { CHD_CODEC_CD_ZSTD, CHD_CODEC_CD_ZLIB, CHD_CODEC_CD_FLAC, CHD_CODEC_CD_LZMA };
 static const std::array<chd_codec_type, 4> s_default_ld_compression = { CHD_CODEC_AVHUFF };
 
 
