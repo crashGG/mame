@@ -29,6 +29,9 @@
 
 #include "rendersw.hxx"
 
+#if defined(__LIBRETRO__)
+extern int POSTNOTIFY;
+#endif
 
 //**************************************************************************
 //  DEBUGGING
@@ -219,7 +222,9 @@ void video_manager::frame_update(bool from_debugger)
 	bool anything_changed = update_screens && finish_screen_updates();
 
 	// update inputs and draw the user interface
+#if !defined(__LIBRETRO__)
 	machine().osd().input_update(true);
+#endif
 	anything_changed = emulator_info::draw_user_interface(machine()) || anything_changed;
 
 	// let plugins draw over the UI
@@ -248,13 +253,20 @@ void video_manager::frame_update(bool from_debugger)
 	if (!from_debugger && phase > machine_phase::INIT && m_low_latency && effective_throttle())
 		update_throttle(current_time);
 
+#if !defined(__LIBRETRO__)
 	machine().osd().input_update(false);
+#endif
 	emulator_info::periodic_check();
 
 	if (!from_debugger)
 	{
+#if defined(__LIBRETRO__)
+		if (POSTNOTIFY)
+			machine().call_notifiers(MACHINE_NOTIFY_FRAME);
+#else
 		// perform tasks for this frame
 		machine().call_notifiers(MACHINE_NOTIFY_FRAME);
+#endif
 
 		// update frameskipping
 		if (phase > machine_phase::INIT)
@@ -501,6 +513,10 @@ void video_manager::exit()
 	// free the snapshot target
 	machine().render().target_free(m_snap_target);
 	m_snap_bitmap.reset();
+
+#ifdef __LIBRETRO__
+	return;
+#endif
 
 	// print a final result if we have at least 2 seconds' worth of data
 	if (!emulator_info::standalone() && m_overall_emutime.seconds() >= 1)

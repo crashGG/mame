@@ -20,6 +20,9 @@
 
 #include "osdepend.h"
 
+#ifdef __LIBRETRO__
+#include "libretro/osdretro.h"
+#endif
 
 //**************************************************************************
 //  DEBUGGING
@@ -1373,7 +1376,11 @@ void sound_manager::config_load(config_type cfg_type, config_level cfg_level, ut
 		// treat source INI files or more specific as higher priority than CFG
 		// FIXME: leaky abstraction - this depends on a front-end implementation detail
 		if ((OPTION_PRIORITY_NORMAL + 5) > machine().options().get_entry(OPTION_VOLUME)->priority())
+#ifdef __LIBRETRO__
+			set_attenuation(std::clamp(int(node->get_attribute_int("value", 0)), -32, RETRO_MAX_VOLUME));
+#else
 			set_attenuation(std::clamp(int(node->get_attribute_int("value", 0)), -32, 0));
+#endif
 	}
 
 	// iterate over channel nodes
@@ -1511,6 +1518,15 @@ stream_buffer::sample_t sound_manager::adjust_toward_compressor_scale(stream_buf
 void sound_manager::update(s32 param)
 {
 	LOG("sound_update\n");
+
+#ifdef __LIBRETRO__
+	/* Adjust sound timer to 5 times per frame */
+	if (sound_timer != retro_fps)
+	{
+		sound_timer = retro_fps;
+		m_update_timer->adjust(attotime::from_hz(sound_timer * 5), 0, attotime::from_hz(sound_timer * 5));
+	}
+#endif
 
 	auto profile = g_profiler.start(PROFILER_SOUND);
 

@@ -51,6 +51,9 @@
 #include <functional>
 #include <type_traits>
 
+#ifdef __LIBRETRO__
+#include "libretro/osdretro.h"
+#endif
 
 /***************************************************************************
     LOCAL VARIABLES
@@ -639,7 +642,7 @@ void mame_ui_manager::display_startup_screens(bool first_time)
 	if (!first_time || (str > 0 && str < 60*5) || &machine().system() == &GAME_NAME(___empty) || (machine().debug_flags & DEBUG_FLAG_ENABLED) || video_none)
 		show_gameinfo = show_warnings = false;
 
-#if defined(__EMSCRIPTEN__)
+#if defined(EMSCRIPTEN) || defined(__LIBRETRO__)
 	// also disable for the JavaScript port since the startup screens do not run asynchronously
 	show_gameinfo = show_warnings = false;
 #endif
@@ -1593,11 +1596,13 @@ uint32_t mame_ui_manager::handler_ingame(render_container &container)
 	if (ui_disabled)
 		return 0;
 
+#ifndef __LIBRETRO__
 	if (machine().ui_input().pressed(IPT_UI_CANCEL))
 	{
 		request_quit();
 		return 0;
 	}
+#endif
 
 	// turn on menus if requested
 	if (machine().ui_input().pressed(IPT_UI_MENU))
@@ -1874,7 +1879,11 @@ std::vector<ui::menu_item> mame_ui_manager::slider_init(running_machine &machine
 	m_sliders.clear();
 
 	// add overall volume
+#ifdef __LIBRETRO__
+	slider_alloc(_("Master Volume"), -32, 0, RETRO_MAX_VOLUME, 1, std::bind(&mame_ui_manager::slider_volume, this, _1, _2));
+#else
 	slider_alloc(_("Master Volume"), -32, 0, 0, 1, std::bind(&mame_ui_manager::slider_volume, this, _1, _2));
+#endif
 
 	// add per-channel volume
 	mixer_input info;
